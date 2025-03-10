@@ -1,5 +1,6 @@
 import { AddAlunoDto } from "../controllers/turmas/dtos/AddAlunoDto";
 import { Turma } from "../models/Turma";
+import { AlunosRepository } from "../repositories/alunosRepository";
 import { TurmasRepository } from "../repositories/turmasRepository";
 import { UsersRepository } from "../repositories/usersRepository";
 import { IAlunoInTurma } from "./interfaces/IAlunoInTurma";
@@ -7,10 +8,12 @@ import { IAlunoInTurma } from "./interfaces/IAlunoInTurma";
 export class TurmasService {
   private readonly turmasRepository: TurmasRepository;
   private readonly usersRepository: UsersRepository;
+  private readonly alunosRepository: AlunosRepository
 
-  constructor(turmasRepository: TurmasRepository, usersRepository: UsersRepository) {
+  constructor(turmasRepository: TurmasRepository, usersRepository: UsersRepository, alunosRepository: AlunosRepository) {
     this.turmasRepository = turmasRepository;
     this.usersRepository = usersRepository;
+    this.alunosRepository = alunosRepository;
   }
 
   async getAllTurmas() {
@@ -27,8 +30,11 @@ export class TurmasService {
   }
 
   async addAlunoInTurma(alunoInTurmaData: AddAlunoDto) {
-    const alunosToAdd = await this.usersRepository.getUsersAreAlunosByUserIds(alunoInTurmaData.usersIds);
-    await this.turmasRepository.addAlunoInTurma(alunoInTurmaData.turmaId, alunosToAdd);
+    const usersAreAlunos = await this.usersRepository.getUsersAreAlunosByUserIds(alunoInTurmaData.usersIds);
+    const userNames = usersAreAlunos.map((user) => user.name);
+    const alunosToAdd = await this.alunosRepository.getByNames(userNames)
+
+    await this.turmasRepository.addAlunoInTurma(alunoInTurmaData.turmaId, alunosToAdd, usersAreAlunos);
     this.updateAlunosCount(alunoInTurmaData.turmaId, alunosToAdd.length);
     return;
   }

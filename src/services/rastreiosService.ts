@@ -1,8 +1,11 @@
 import { evaluateStatusCrianca } from "../core/utils/rastreios/calculateResult";
 import { getFaixaEtaria } from "../core/utils/rastreios/getFaixaEtaria";
+import { Aluno } from "../models/Aluno";
 import { Rastreio } from "../models/Rastreio";
 import { Turma } from "../models/Turma";
+import { TurmaAluno } from "../models/TurmaAluno";
 import { User } from "../models/User";
+import { AlunosRepository } from "../repositories/alunosRepository";
 import { RastreiosRepository } from "../repositories/rastreiosRepository";
 import { TurmasRepository } from "../repositories/turmasRepository";
 import { UsersRepository } from "../repositories/usersRepository";
@@ -12,30 +15,43 @@ export class RastreiosService {
   private readonly rastreiosRepository: RastreiosRepository;
   private readonly turmasRepository: TurmasRepository;
   private readonly usersRepository: UsersRepository
+  private readonly alunosRepository: AlunosRepository
 
-  constructor(rastreiosRepository: RastreiosRepository, turmasRepository: TurmasRepository, usersRepository: UsersRepository) {
+  constructor(rastreiosRepository: RastreiosRepository, turmasRepository: TurmasRepository, usersRepository: UsersRepository, alunosRepository: AlunosRepository) {
     this.rastreiosRepository = rastreiosRepository;
     this.turmasRepository = turmasRepository;
     this.usersRepository = usersRepository;
+    this.alunosRepository = alunosRepository;
   }
 
   async getAll(limit: number, cursor?: string, nomeAluno?: string, turmaId?: string) {
-    let userIds: string[] = [];
+    let userIds: string[] | undefined = [];
     let users: User[] | null = []
 
     if (nomeAluno || turmaId) {
-      users = await this.usersRepository.getUsersByNameOrTurma(nomeAluno, turmaId);
-      userIds = users.map(u => u.userId);
+      if(turmaId) {
+        const turmaAlunos = await this.turmasRepository.getSubCollection<TurmaAluno>("turmas", turmaId, "alunos");
+
+        if (turmaAlunos.length > 0) {
+          users = await this.usersRepository.getByIds(turmaAlunos.map((turmaAluno) => turmaAluno.userId), "userId");
+          userIds = users?.map(u => u.userId);
+        }
+      } else {
+        users = await this.usersRepository.getByName(nomeAluno);
+        userIds = users.map(u => u.userId);
+      }
     }
 
     const rastreios = await this.rastreiosRepository.getWithFilters(limit, cursor, userIds);
 
     if(rastreios.length === 0) return { rastreios: [], nextCursor: null }
 
-    const mappedUsers = await this.mappedUsers(rastreios, users);
-    const mappedTurmas = await this.mappedTurmas(mappedUsers);
+    const mappedUsers = await this.mappedUsers(rastreios, users as User[]);
 
-    const data = this.mapData(rastreios, mappedUsers, mappedTurmas);
+    const alunos = await this.alunosRepository.getByNames(Array.from(mappedUsers.values()).map(user => user.name));
+    const mappedTurmas = await this.mappedTurmas(alunos);
+
+    const data = this.mapData(rastreios, mappedUsers, mappedTurmas, alunos);
     const lastDoc = rastreios[rastreios.length - 1];
 
     return {
@@ -48,9 +64,10 @@ export class RastreiosService {
     const rastreios = await this.rastreiosRepository.getByIds(ids);
     if(rastreios?.length === 0) return { rastreios: [] }
     const mappedUsers = await this.mappedUsers(rastreios as Rastreio[]);
-    const mappedTurmas = await this.mappedTurmas(mappedUsers);
+    const alunos = await this.alunosRepository.getByNames(Array.from(mappedUsers.values()).map(user => user.name));
+    const mappedTurmas = await this.mappedTurmas(alunos);
 
-    return { rastreios: this.mapData(rastreios as Rastreio[], mappedUsers, mappedTurmas) };
+    return { rastreios: this.mapData(rastreios as Rastreio[], mappedUsers, mappedTurmas, alunos) };
   }
 
   async generatePDF(ids: string[]) {
@@ -87,10 +104,11 @@ export class RastreiosService {
     return this.rastreiosRepository.delete(id);
   }
 
-  private mapData(rastreios: Rastreio[], usersMap: Map<string, User>, turmasMap: Map<string, Turma>) {
+  private mapData(rastreios: Rastreio[], usersMap: Map<string, User>, turmasMap: Map<string, Turma>, alunos: Aluno[]) {
     return rastreios.map(rastreio => {
-      const aluno = usersMap.get(rastreio.userId);
-      const turma = aluno ? turmasMap.get(aluno.turmaId)?.name : "Sem turma"
+      const userRastreio = usersMap.get(rastreio.userId);
+      const aluno = alunos.find((aluno) => aluno.name.toLowerCase() === userRastreio?.name.toLowerCase())
+      const turma = aluno ? turmasMap.get(aluno?.turmaId as string)?.name : "Sem turma"
 
       return {
         id: rastreio.id,
@@ -109,9 +127,9 @@ export class RastreiosService {
     return new Map(users?.map(u => [u.userId, u]));
   }
 
-  private async mappedTurmas(users: Map<string, User>) {
-    const fetchedTurmaIds = [...new Set(Array.from(users.values()).map(u => u.turmaId).filter(Boolean))];
-    const turmas = fetchedTurmaIds.length > 0 ? await this.turmasRepository.getByIds(fetchedTurmaIds) : [];
+  private async mappedTurmas(alunos: Aluno[]) {
+    const fetchedTurmaIds = [...new Set(alunos.map(a => a.turmaId).filter(Boolean))];
+    const turmas = fetchedTurmaIds.length > 0 ? await this.turmasRepository.getByIds(fetchedTurmaIds as string[]) : [];
     return new Map(turmas?.map(u => [u.id as string, u]));
   }
 }

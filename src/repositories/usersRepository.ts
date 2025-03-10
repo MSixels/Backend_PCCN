@@ -27,7 +27,7 @@ export class UsersRepository extends RepositoryBase<User> {
     return usersIncludeInIds;
   }
 
-  async getUsersByNameOrTurma(name?: string, turmaId?: string) {
+  async getByName(name?: string) {
     const collectionRef = firestore.collection(UsersRepository.COLLECTION_NAME);
     let query = collectionRef as FirebaseFirestore.Query<FirebaseFirestore.DocumentData>;
 
@@ -40,11 +40,38 @@ export class UsersRepository extends RepositoryBase<User> {
     const snapshot = await query.get();
     const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
 
-    if (turmaId) {
-      return users.filter(user => user.turmaId === turmaId);
-    }
     return users;
   }
+
+  async getByNames(names: string[]): Promise<User[]> {
+    if (names.length === 0) return [];
+    const upperCaseNames = names.filter(name => name).map(name => name.normalize());
+    const chunkSize = 10;
+    const chunks = [];
+  
+    for (let i = 0; i < upperCaseNames.length; i += chunkSize) {
+      chunks.push(upperCaseNames.slice(i, i + chunkSize));
+    }
+  
+    const queryPromises = chunks
+      .filter(chunck => chunck && chunck.length > 0)
+      .map(async (chunk) => {
+        const snapshot = await firestore
+          .collection(UsersRepository.COLLECTION_NAME)
+          .where("name", "in", chunk)
+          .get();
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as unknown as User));
+    });
+  
+    const results = await Promise.all(queryPromises);
+
+    const uniqueResults = Array.from(
+      new Map(results.flat().map(item => [item.name, item])).values()
+    );
+  
+    return uniqueResults;
+  }
+
 
   async usersExistsByEmail(email: string): Promise<boolean> {
     const collectionRef = firestore.collection(UsersRepository.COLLECTION_NAME);

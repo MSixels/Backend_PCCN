@@ -37,8 +37,8 @@ const usersRepository = new UsersRepository();
 const rastreiosRepository = new RastreiosRepository();
 const alunosRepository = new AlunosRepository();
 
-const turmasService = new TurmasService(turmasRepository, usersRepository);
-const rastreiosService = new RastreiosService(rastreiosRepository, turmasRepository, usersRepository);
+const turmasService = new TurmasService(turmasRepository, usersRepository, alunosRepository);
+const rastreiosService = new RastreiosService(rastreiosRepository, turmasRepository, usersRepository, alunosRepository);
 const authService = new AuthService();
 const alunoService = new AlunoService(alunosRepository, usersRepository)
 

@@ -1,4 +1,5 @@
 import { firestore } from "../config/firebaseConfig";
+import { Aluno } from "../models/Aluno";
 import { Turma } from "../models/Turma";
 import { User } from "../models/User";
 import { RepositoryBase } from "./repositoryBase";
@@ -24,20 +25,22 @@ export class TurmasRepository extends RepositoryBase<Turma> {
     await batch.commit();
   }
 
-  async addAlunoInTurma(turmaId: string, alunosToAdd: User[]) {
+  async addAlunoInTurma(turmaId: string, alunosToAdd: Aluno[], alunosUsers: User[]) {
     const batch = firestore.batch();
     const turmaRef = firestore.collection(TurmasRepository.COLLECTION_NAME).doc(turmaId);
 
     alunosToAdd.map((aluno) => {
-      const alunoRefInTurma = turmaRef.collection("alunos").doc(aluno.userId);
+      const alunoRefInTurma = turmaRef.collection("alunos").doc(aluno.id);
+      const user = alunosUsers.find((user) => user.name.toLowerCase() === aluno.name.toLowerCase())
       batch.set(alunoRefInTurma, {
-        email: aluno.email,
+        email: user?.email,
         name: aluno.name,
         matricula: aluno.matricula ?? "",
-        status: aluno.isActive,
+        status: user?.isActive,
+        userId: user?.userId
       });
 
-      const alunoRefInUsers = firestore.collection("users").doc(aluno.userId);
+      const alunoRefInUsers = firestore.collection("alunos").doc(aluno.id);
       batch.set(alunoRefInUsers, { turmaId }, { merge: true });
     });
 

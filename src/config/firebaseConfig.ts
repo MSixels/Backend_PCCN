@@ -8,5 +8,6 @@ admin.initializeApp({
 });
 
 const firestore = admin.firestore();
+firestore.settings({ ignoreUndefinedProperties: true, });
 
 export { firestore };

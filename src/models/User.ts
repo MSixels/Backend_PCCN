@@ -6,8 +6,8 @@ export interface User {
   dataNascimento?: string;
   email: string
   isActive: boolean;
-  matricula?: string;
+  matricula: string;
   name: string;
   type: EUserType;
-  userId?: string;
+  userId: string;
 }
